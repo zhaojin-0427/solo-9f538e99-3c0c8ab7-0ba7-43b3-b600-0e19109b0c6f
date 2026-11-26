@@ -1,0 +1,560 @@
+/* ============================================================
+   夜校大字讲义排版台
+   关键几何：.page 为标准 A5（148mm × 210mm），预览 / 离屏测量 /
+   打印共用同一套类与尺寸，保证“所见即所印”。
+   ============================================================ */
+
+:root {
+  --a5-w: 148mm;
+  --a5-h: 210mm;
+  --page-pad-top: 12mm;
+  --page-pad-x: 13mm;
+  --page-pad-bottom: 11mm;
+
+  --body-size: 18pt;
+  --body-leading: 1.7;
+  --fn-size: calc(var(--body-size) * 0.68);
+
+  --ink: #20242b;
+  --ink-soft: #4b5563;
+  --paper: #ffffff;
+  --ui-bg: #f4f1ea;
+  --panel: #fffdf8;
+  --line: #e3ddcf;
+  --accent: #1f5fa8;
+  --accent-dark: #174a82;
+  --danger: #c0392b;
+  --danger-bg: #fdecea;
+  --warn: #9a6700;
+  --shadow: 0 3px 18px rgba(60, 50, 30, 0.22);
+
+  --font-handout: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Zen Hei", sans-serif;
+  --font-ui: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  color: var(--ink);
+  background: var(--ui-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------- 顶栏 ---------------- */
+
+.app-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 22px;
+  background: #1f2937;
+  color: #f8fafc;
+  flex-wrap: wrap;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #f5c542;
+  color: #1f2937;
+  font-size: 24px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.app-header h1 { font-size: 19px; margin: 0; letter-spacing: 1px; }
+.brand-sub { margin: 2px 0 0; font-size: 12.5px; color: #c7cedb; }
+.brand-sub code { color: #ffd97a; }
+
+.header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.status-pill {
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  white-space: nowrap;
+}
+.status-pill.is-error { background: var(--danger); color: #fff; }
+.status-pill.is-ok { background: #2e7d32; color: #fff; }
+
+/* ---------------- 按钮 ---------------- */
+
+.btn {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-primary { background: #f5c542; color: #1f2937; font-weight: 700; }
+.btn-primary:hover:not(:disabled) { background: #ffd45e; }
+
+.btn-ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.35);
+  color: inherit;
+}
+.control-pane .btn-ghost { border-color: var(--line); color: var(--ink-soft); background: #fff; }
+.btn-ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+.btn-small { font-size: 13px; padding: 6px 12px; background: #fff; border-color: var(--line); color: var(--ink); }
+.btn-small:hover { border-color: var(--accent); color: var(--accent); }
+
+.print-icon { font-size: 16px; }
+
+/* ---------------- 主布局 ---------------- */
+
+.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 410px minmax(0, 1fr);
+}
+
+.control-pane {
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.control-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 18px 18px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.preview-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 26px 20px 60px;
+  background: #e8e4da;
+  background-image: radial-gradient(rgba(120, 110, 80, 0.18) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+}
+
+.preview-empty { text-align: center; color: var(--ink-soft); padding-top: 80px; font-size: 16px; }
+
+/* ---------------- 卡片 / 表单 ---------------- */
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 16px 16px;
+  margin: 0;
+}
+.card legend {
+  font-size: 15px;
+  font-weight: 700;
+  padding: 0 6px;
+  color: var(--accent-dark);
+}
+
+.hint { font-size: 12.5px; line-height: 1.65; color: var(--ink-soft); margin: 6px 0 10px; }
+.hint code, .tip-list code {
+  background: #f3efe2;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #8a5a00;
+}
+
+.source-input {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  font: 14px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #fdfcf8;
+}
+.source-input:focus { outline: 2px solid rgba(31, 95, 168, 0.35); border-color: var(--accent); }
+
+.row-between { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; }
+
+.note-fields { display: flex; flex-direction: column; gap: 10px; }
+
+.note-field {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fdfcf8;
+}
+.note-field.is-missing { border-color: #e0b4ad; background: var(--danger-bg); }
+
+.note-field-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.note-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+}
+.note-field.is-missing .note-badge { background: var(--danger); }
+.note-missing-tag { color: var(--danger); font-weight: 600; font-size: 12px; }
+
+.note-field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font: 13.5px/1.6 var(--font-ui);
+  resize: vertical;
+  min-height: 52px;
+  background: #fff;
+}
+.note-field textarea:focus { outline: 2px solid rgba(31, 95, 168, 0.3); border-color: var(--accent); }
+
+.font-row { display: flex; align-items: center; gap: 14px; }
+.font-row input[type="range"] { flex: 1 1 auto; accent-color: var(--accent); height: 28px; }
+.font-row output {
+  flex: 0 0 auto;
+  min-width: 58px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  background: #eef4fb;
+  color: var(--accent-dark);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+.font-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.tip-list { margin: 4px 0 0; padding-left: 20px; font-size: 12.5px; line-height: 1.8; color: var(--ink-soft); }
+
+/* ---------------- 问题列表 ---------------- */
+
+.card-issues { border-color: #e6b0aa; background: #fff7f5; }
+.issues-list { display: flex; flex-direction: column; gap: 8px; }
+
+.issue-item {
+  border-left: 4px solid var(--danger);
+  background: var(--danger-bg);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.issue-item button {
+  margin-top: 6px;
+  font-size: 12.5px;
+  border: 1px solid var(--danger);
+  background: #fff;
+  color: var(--danger);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.issue-line-text {
+  display: block;
+  margin-top: 4px;
+  padding: 5px 8px;
+  background: rgba(192, 57, 43, 0.08);
+  border-radius: 4px;
+  word-break: break-all;
+  max-height: 4.8em;
+  overflow: hidden;
+}
+
+.warn-item {
+  border-left: 4px solid #d9a300;
+  background: #fff8e1;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: var(--warn);
+}
+
+/* ============================================================
+   A5 纸面（预览、测量、打印共用）
+   ============================================================ */
+
+.page {
+  position: relative;
+  width: var(--a5-w);
+  height: var(--a5-h);
+  padding: var(--page-pad-top) var(--page-pad-x) var(--page-pad-bottom);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  flex: 0 0 auto;
+
+  display: flex;
+  flex-direction: column;
+
+  font-family: var(--font-handout);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.page-body {
+  flex: 0 0 auto;
+  font-size: var(--body-size);
+  line-height: var(--body-leading);
+  letter-spacing: 0.01em;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* 每条“视觉整行”一个块；内容由测量后的真实换行切出 */
+.body-line {
+  white-space: nowrap;
+}
+.body-line.is-blank {
+  /* &nbsp; 已撑出行高 */
+}
+
+/* 正文里的脚注引用标记 */
+.fn-ref {
+  white-space: nowrap;
+  font-size: 0.66em;
+  font-weight: 700;
+  line-height: 0;
+  vertical-align: super;
+  color: var(--accent-dark);
+  padding: 0 1px;
+}
+.fn-ref::before { content: "["; }
+.fn-ref::after { content: "]"; }
+
+/* 页底脚注区：margin-top:auto 把它压到页底；
+   正文 margin-bottom 保证与脚注之间的最小间距 */
+.page-body { margin-bottom: 4mm; }
+
+.page-footnotes {
+  flex: 0 0 auto;
+  margin-top: auto;
+  font-size: var(--fn-size);
+  line-height: 1.55;
+  color: #2c333d;
+}
+.page-footnotes.has-notes {
+  border-top: 0.35mm solid #3a3f47;
+  padding-top: 2.2mm;
+}
+
+.fn-item {
+  display: flex;
+  align-items: baseline;
+  gap: 2mm;
+  margin: 0 0 1.1mm;
+}
+.fn-item:last-child { margin-bottom: 0; }
+
+.fn-marker {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+.fn-marker::before { content: "["; }
+.fn-marker::after { content: "]"; }
+
+.fn-text {
+  flex: 1 1 auto;
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+}
+.fn-text.is-empty {
+  color: var(--danger);
+  font-style: normal;
+}
+.fn-text.is-empty::before { content: "（脚注内容未填写）"; }
+
+.page-footer {
+  flex: 0 0 auto;
+  margin-top: 4mm;
+  text-align: center;
+  font-size: 9pt;
+  color: #6b7280;
+  font-family: var(--font-ui);
+}
+
+/* 超限行标记（仅错误状态；打印已停用） */
+.page.is-invalid { outline: 2.5px solid var(--danger); outline-offset: 2px; }
+.body-line.line-bad {
+  background: repeating-linear-gradient(
+    -45deg, rgba(192, 57, 43, 0.16), rgba(192, 57, 43, 0.16) 6px,
+    rgba(192, 57, 43, 0.05) 6px, rgba(192, 57, 43, 0.05) 12px);
+  outline: 2px solid var(--danger);
+  border-radius: 3px;
+}
+
+/* 问题页顶部的可读警示条（错误状态下打印已整体停用） */
+.page-warning {
+  flex: 0 0 auto;
+  background: var(--danger);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 10.5pt;
+  font-weight: 700;
+  line-height: 1.5;
+  border-radius: 2mm;
+  padding: 2.5mm 3.5mm;
+  margin-bottom: 4mm;
+}
+
+/* 当文档存在阻断问题时，即便从浏览器菜单 / Ctrl+P 调起打印，
+   也只输出停用说明，不输出分页已坏的讲义。 */
+.print-blocked-notice { display: none; }
+
+/* ---------------- 离屏测量台 ---------------- */
+
+#measure-stage {
+  position: fixed;
+  left: -20000px;
+  top: 0;
+  width: var(--a5-w);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 测量页：高度放开，让内容自然撑高 —— 撑高后的 border-box
+   高度若超过 A5 高度，即判定放不下。宽度仍严格为 A5。 */
+.page-measuring {
+  height: auto !important;
+  min-height: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.page-measuring .page-footnotes { margin-top: 0; }
+
+#a5-ruler {
+  width: var(--a5-w);
+  height: var(--a5-h);
+}
+
+/* ---------------- 响应式（窄屏堆叠） ---------------- */
+
+@media (max-width: 900px) {
+  body { height: auto; min-height: 100%; }
+  .app-main { grid-template-columns: 1fr; }
+  .control-pane { border-right: none; border-bottom: 1px solid var(--line); }
+  .control-scroll { height: auto; max-height: none; overflow: visible; }
+  /* A5 纸宽固定（约 559px），窄屏在预览区内横向滚动查看，不撑破布局 */
+  .preview-pane { min-height: 70vh; }
+}
+
+/* ============================================================
+   打印：只输出 #pages 里已经分好页的 A5 纸，不重新排版。
+   ============================================================ */
+
+@page {
+  size: A5;
+  margin: 0;
+}
+
+@media print {
+  html, body {
+    width: 148mm;
+    height: auto;
+    background: #fff !important;
+    display: block;
+  }
+
+  .app-header,
+  .control-pane,
+  #measure-stage,
+  .preview-empty { display: none !important; }
+
+  .app-main { display: block; }
+
+  .preview-pane {
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+    background-image: none !important;
+  }
+
+  .pages { display: block; gap: 0; }
+
+  .page {
+    margin: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+    width: 148mm;
+    height: 210mm;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  /* 阻断状态：不输出讲义页，只输出停用说明。
+     直接隐藏 body 下除说明外的所有顶层节点，杜绝残余空白页。 */
+  body.print-blocked > *:not(.print-blocked-notice) { display: none !important; }
+  body.print-blocked .print-blocked-notice {
+    display: block !important;
+    width: 148mm;
+    padding: 28mm 16mm 0;
+    margin: 0;
+    font: 700 17pt/1.9 var(--font-ui);
+    color: var(--danger);
+    text-align: center;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

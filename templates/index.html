@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>夜校大字讲义排版台 · A5 脚注分页</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="print-blocked-notice" role="alert">
+    讲义中存在“单独放在空白 A5 页也排不下”的正文行（或横向超宽行），<br>
+    打印已停用。<br><br>
+    请回到屏幕页面：调小正文字号，或缩短对应脚注，<br>
+    待问题消除后再打印 / 另存 PDF。
+  </div>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">脚</span>
+      <div>
+        <h1>夜校大字讲义排版台</h1>
+        <p class="brand-sub">粘贴带 <code>[^编号]</code> 的讲义，选字号，即得 A5 分页预览，页底排齐本页脚注</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span id="status-pill" class="status-pill" role="status" aria-live="polite">准备中…</span>
+      <button id="repaginate-btn" type="button" class="btn btn-ghost" title="按当前内容重新测量并分页">重新分页</button>
+      <button id="print-btn" type="button" class="btn btn-primary" disabled>
+        <span class="print-icon" aria-hidden="true">⎙</span> 打印 / 另存 PDF
+      </button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- ============ 左侧：输入与设置 ============ -->
+    <section class="control-pane" aria-label="讲义编辑区">
+      <div class="control-scroll">
+
+        <fieldset class="card">
+          <legend>① 讲义正文</legend>
+          <p class="hint">
+            直接粘贴纯文本。脚注位置写成 <code>[^1]</code> 这样的编号；
+            换行会被保留，空行作为段间空行。
+          </p>
+          <textarea id="source-input" class="source-input" spellcheck="false"
+            placeholder="例如：&#10;智能手机课的第一次讲义……[^1]&#10;&#10;第二段内容……[^2]"></textarea>
+          <div class="row-between">
+            <button id="load-sample-btn" type="button" class="btn btn-small">载入示例讲义</button>
+            <button id="clear-btn" type="button" class="btn btn-small btn-ghost">清空</button>
+          </div>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>② 填写脚注</legend>
+          <p class="hint">正文中出现过的每个编号都会列在这里；同一编号在同一页页底只排一次，跨页则在各页分别排出。</p>
+          <div id="note-fields" class="note-fields"></div>
+          <p id="note-empty-hint" class="hint" hidden>正文里还没有发现 <code>[^编号]</code> 标记。</p>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>③ 正文字号</legend>
+          <div class="font-row">
+            <input id="font-size" type="range" min="14" max="28" step="1" value="18"
+                   aria-label="正文字号（磅）">
+            <output id="font-size-value" for="font-size">18 pt</output>
+          </div>
+          <div class="font-presets" role="group" aria-label="常用字号">
+            <button type="button" class="chip" data-size="16">16</button>
+            <button type="button" class="chip" data-size="18">18</button>
+            <button type="button" class="chip" data-size="20">20</button>
+            <button type="button" class="chip" data-size="22">22</button>
+            <button type="button" class="chip" data-size="24">24</button>
+            <button type="button" class="chip" data-size="28">28</button>
+          </div>
+          <p class="hint">改大或改小后会按浏览器真实换行重新测量、重新分页。</p>
+        </fieldset>
+
+        <section id="issues-card" class="card card-issues" hidden>
+          <legend>④ 排版问题</legend>
+          <div id="issues-list" class="issues-list"></div>
+        </section>
+
+        <section class="card card-tip">
+          <legend>打印说明</legend>
+          <ul class="tip-list">
+            <li>纸张已设为 <strong>A5、页边距 0</strong>，每页就是预览中的一张 A5。</li>
+            <li>在打印对话框中把缩放设为 <strong>100% / 实际大小</strong>，即可与预览完全一致。</li>
+            <li>存在“空白页也放不下”的超限行时，打印会停用；请调小字号或缩短对应脚注。</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- ============ 右侧：A5 预览 ============ -->
+    <section class="preview-pane" aria-label="A5 分页预览">
+      <div id="pages" class="pages"></div>
+      <div id="preview-empty" class="preview-empty" hidden>
+        <p>在左侧粘贴讲义，或点“载入示例讲义”。</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- 离屏测量台：结构 / 样式与真实 .page 完全一致，仅高度改为自适应 -->
+  <div id="measure-stage" aria-hidden="true">
+    <div class="page page-measuring" id="measure-page">
+      <div class="page-body" id="measure-body"></div>
+      <aside class="page-footnotes" id="measure-footnotes"></aside>
+      <footer class="page-footer"><span class="page-num">1</span></footer>
+    </div>
+    <div id="a5-ruler"></div>
+  </div>
+
+  <template id="tpl-page">
+    <section class="page">
+      <div class="page-body"></div>
+      <aside class="page-footnotes"></aside>
+      <footer class="page-footer"><span class="page-num"></span></footer>
+    </section>
+  </template>
+
+  <script src="{{ url_for('static', filename='js/paginate.js') }}" defer></script>
+</body>
+</html>
