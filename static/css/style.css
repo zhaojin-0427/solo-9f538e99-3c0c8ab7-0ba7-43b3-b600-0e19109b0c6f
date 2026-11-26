@@ -252,6 +252,7 @@ body {
 .note-field textarea:focus { outline: 2px solid rgba(31, 95, 168, 0.3); border-color: var(--accent); }
 
 .font-row { display: flex; align-items: center; gap: 14px; }
+
 .font-row input[type="range"] { flex: 1 1 auto; accent-color: var(--accent); height: 28px; }
 .font-row output {
   flex: 0 0 auto;
@@ -276,6 +277,167 @@ body {
 }
 .chip:hover { border-color: var(--accent); color: var(--accent); }
 .chip.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ---------------- 拆分脚注 ---------------- */
+
+.split-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin: 4px 0 6px;
+}
+
+.split-select {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+.split-select:disabled { color: var(--ink-soft); background: #f7f5ef; }
+
+.split-panel { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+.split-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.split-count { font-size: 12.5px; font-weight: 700; color: var(--accent-dark); margin-right: auto; }
+
+.split-dirty {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--warn);
+  background: #fff8e1;
+  border-left: 3px solid #d9a300;
+  border-radius: 6px;
+  padding: 6px 9px;
+}
+
+.split-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.split-line {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fdfcf8;
+  padding: 8px 9px;
+}
+
+.split-line-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+
+.split-occ {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.split-occ:hover { background: #f1ede1; }
+.split-occ input[type="checkbox"] { flex: 0 0 auto; margin-top: 4px; accent-color: var(--accent); }
+
+.split-occ-context {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+  white-space: pre-wrap;
+  color: #3c4350;
+}
+.split-mark {
+  background: #fde9a8;
+  color: #7a4b00;
+  font-weight: 700;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.split-ellipsis { color: #9aa1ab; }
+
+.split-occ-pos {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  background: #eef1f5;
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.split-none {
+  font-size: 13px;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.split-new {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 10px;
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+}
+.split-new label { font-size: 13px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
+.split-new textarea { grid-column: 1 / -1; }
+
+.split-input,
+.split-textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 13.5px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+}
+.split-input { max-width: 200px; }
+.split-textarea { resize: vertical; min-height: 58px; font-family: var(--font-ui); }
+.split-input:focus,
+.split-textarea:focus { outline: 2px solid rgba(31, 95, 168, 0.3); border-color: var(--accent); }
+
+.split-actions { display: flex; gap: 8px; }
+
+.split-status {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  border-radius: 6px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  border-left: 4px solid var(--line);
+  background: #f5f5f5;
+  color: var(--ink-soft);
+}
+.split-status.is-error {
+  border-left-color: var(--danger);
+  background: var(--danger-bg);
+  color: #8f2b20;
+}
+.split-status.is-success {
+  border-left-color: #2e7d32;
+  background: #e8f5e9;
+  color: #1e5b23;
+}
 
 .tip-list { margin: 4px 0 0; padding-left: 20px; font-size: 12.5px; line-height: 1.8; color: var(--ink-soft); }
 

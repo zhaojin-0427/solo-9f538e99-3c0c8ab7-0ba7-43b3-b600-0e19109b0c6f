@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Playwright end-to-end checks for the A5 footnote pagination engine",
   "scripts": {
-    "test": "node verify.cjs"
+    "test": "node verify.cjs",
+    "test:split": "node split-verify.cjs"
   },
   "devDependencies": {
     "pdf-lib": "1.17.1",

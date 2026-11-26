@@ -56,8 +56,47 @@
           <p id="note-empty-hint" class="hint" hidden>正文里还没有发现 <code>[^编号]</code> 标记。</p>
         </fieldset>
 
+        <fieldset class="card" id="split-card">
+          <legend>③ 拆分重复使用的脚注</legend>
+          <p class="hint">
+            同一条脚注被用来解释两种意思时，可以把其中几处改用新注：先选一个脚注号，
+            下面会按<strong>正文原换行</strong>列出每一处引用及其上下文；同一行里的多处引用
+            可以分别勾选。
+          </p>
+          <label class="split-label" for="split-source">要拆分的脚注号</label>
+          <select id="split-source" class="split-select">
+            <option value="">正文里还没有脚注引用</option>
+          </select>
+          <p id="split-empty-hint" class="hint" hidden></p>
+          <div id="split-panel" class="split-panel" hidden>
+            <div class="split-toolbar">
+              <span id="split-count" class="split-count">已勾选 0 / 0 处</span>
+              <button id="split-select-all" type="button" class="btn btn-small">全选</button>
+              <button id="split-clear-selection" type="button" class="btn btn-small btn-ghost">清空勾选</button>
+              <button id="split-reload" type="button" class="btn btn-small btn-ghost">重新载入当前正文</button>
+            </div>
+            <p id="split-dirty-hint" class="split-dirty" hidden>
+              正文已改动：确认时会按打开时的“原行”逐字匹配当前正文；只要该行内容未变、仅位置移动，仍可拆注。
+            </p>
+            <ol id="split-lines" class="split-lines"></ol>
+            <div class="split-new">
+              <label for="split-new-id">新脚注号</label>
+              <input id="split-new-id" class="split-input" type="text" autocomplete="off"
+                     spellcheck="false" placeholder="例如 5 或 note-b">
+              <label for="split-new-note">新脚注释义</label>
+              <textarea id="split-new-note" class="split-textarea" rows="3"
+                        placeholder="填写这个新编号对应的脚注全文…"></textarea>
+            </div>
+            <div class="split-actions">
+              <button id="split-confirm" type="button" class="btn btn-small btn-primary">确认拆注</button>
+              <button id="split-cancel" type="button" class="btn btn-small btn-ghost">取消</button>
+            </div>
+            <p id="split-status" class="split-status" role="status" aria-live="polite" hidden></p>
+          </div>
+        </fieldset>
+
         <fieldset class="card">
-          <legend>③ 正文字号</legend>
+          <legend>④ 正文字号</legend>
           <div class="font-row">
             <input id="font-size" type="range" min="14" max="28" step="1" value="18"
                    aria-label="正文字号（磅）">
@@ -75,7 +114,7 @@
         </fieldset>
 
         <section id="issues-card" class="card card-issues" hidden>
-          <legend>④ 排版问题</legend>
+          <legend>⑤ 排版问题</legend>
           <div id="issues-list" class="issues-list"></div>
         </section>
 

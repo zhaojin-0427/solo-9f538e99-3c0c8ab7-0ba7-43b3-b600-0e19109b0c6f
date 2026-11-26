@@ -44,6 +44,21 @@
   const issuesCard = document.getElementById("issues-card");
   const issuesList = document.getElementById("issues-list");
 
+  const splitSourceSelect = document.getElementById("split-source");
+  const splitPanel = document.getElementById("split-panel");
+  const splitEmptyHint = document.getElementById("split-empty-hint");
+  const splitLinesEl = document.getElementById("split-lines");
+  const splitCount = document.getElementById("split-count");
+  const splitDirtyHint = document.getElementById("split-dirty-hint");
+  const splitNewId = document.getElementById("split-new-id");
+  const splitNewNote = document.getElementById("split-new-note");
+  const splitConfirmBtn = document.getElementById("split-confirm");
+  const splitCancelBtn = document.getElementById("split-cancel");
+  const splitReloadBtn = document.getElementById("split-reload");
+  const splitSelectAllBtn = document.getElementById("split-select-all");
+  const splitClearSelectionBtn = document.getElementById("split-clear-selection");
+  const splitStatus = document.getElementById("split-status");
+
   const measurePage = document.getElementById("measure-page");
   const measureBody = document.getElementById("measure-body");
   // 测量时 #measure-body 同时充当“字符化换行镜像”和“试排容器”
@@ -111,17 +126,22 @@
 
   function persist() {
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          text: state.text,
-          notes: state.notes,
-          fontSizePt: state.fontSizePt,
-        })
-      );
+      persistStrict();
     } catch (err) {
       console.warn("保存本地草稿失败：", err);
     }
+  }
+
+  /** 严格保存：失败时抛出，由拆注确认流程回滚 */
+  function persistStrict() {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        text: state.text,
+        notes: state.notes,
+        fontSizePt: state.fontSizePt,
+      })
+    );
   }
 
   // ============================================================
@@ -556,6 +576,474 @@
   }
 
   // ============================================================
+  // 拆分脚注
+  //
+  // 老师选中某个脚注号后，按“正文原换行”把每一处引用（含同一行
+  // 的多处）各自列成可勾选项，并保留打开时的原行快照。期间讲义
+  // 仍可编辑；确认时按“原行内容在当前正文中逐字匹配、且只匹配
+  // 到唯一一行”重新定位，因此整行移动不影响拆注，而内容改动、
+  // 重复行、撞号或保存失败都会中止并保持原状。
+  // ============================================================
+
+  /** 本次拆注会话；null 表示尚未选择脚注号 */
+  let splitSession = null;
+  let splitOptionsSignature = "";
+
+  /**
+   * 枚举一行里属于 sourceId 的引用。ordinal 是“本行内第几处”
+   * （从 0 开始），用于在当前正文中重新定位同一处标记。
+   */
+  function listSplitOccurrences(lineText, sourceId) {
+    const re = new RegExp(REF_SOURCE, "g");
+    const out = [];
+    let m;
+    while ((m = re.exec(lineText)) !== null) {
+      if (normId(m[1]) !== sourceId) continue;
+      out.push({
+        ordinal: out.length,
+        start: m.index,
+        end: m.index + m[0].length,
+        marker: m[0],
+        inner: m[1],
+      });
+    }
+    return out;
+  }
+
+  /** 打开 / 重建拆注会话：抓取当前正文里的全部引用处作为快照 */
+  function openSplitSession(sourceId) {
+    const text = state.text;
+    const lines = [];
+
+    text.split("\n").forEach((lineText, lineIndex) => {
+      const occurrences = listSplitOccurrences(lineText, sourceId);
+      if (occurrences.length === 0) return;
+      lines.push({
+        lineIndex,
+        lineText,
+        occurrences: occurrences.map((occ) => ({ ...occ, checked: false })),
+      });
+    });
+
+    splitSession = { sourceId, textSnapshot: text, lines };
+  }
+
+  function splitCheckedOccurrences() {
+    const out = [];
+    if (!splitSession) return out;
+    for (const line of splitSession.lines) {
+      for (const occ of line.occurrences) {
+        if (occ.checked) out.push({ line, occ });
+      }
+    }
+    return out;
+  }
+
+  function updateSplitCount() {
+    if (!splitSession) {
+      splitCount.textContent = "已勾选 0 / 0 处";
+      return;
+    }
+    let total = 0;
+    let checked = 0;
+    for (const line of splitSession.lines) {
+      for (const occ of line.occurrences) {
+        total += 1;
+        if (occ.checked) checked += 1;
+      }
+    }
+    splitCount.textContent = "已勾选 " + checked + " / " + total + " 处";
+  }
+
+  function showSplitStatus(text, kind) {
+    splitStatus.hidden = false;
+    splitStatus.className = "split-status" + (kind ? " is-" + kind : "");
+    splitStatus.textContent = text;
+  }
+
+  function clearSplitStatus() {
+    splitStatus.hidden = true;
+    splitStatus.textContent = "";
+    splitStatus.className = "split-status";
+  }
+
+  /** 摘要一段上下文（保留原文，只截前后各 34 个字符） */
+  function splitContext(lineText, start, end) {
+    const radius = 34;
+    const rawBefore = lineText.slice(0, start);
+    const rawAfter = lineText.slice(end);
+    return {
+      before: rawBefore.length > radius ? rawBefore.slice(-radius) : rawBefore,
+      beforeCut: rawBefore.length > radius,
+      after: rawAfter.length > radius ? rawAfter.slice(0, radius) : rawAfter,
+      afterCut: rawAfter.length > radius,
+    };
+  }
+
+  function renderSplitPanel() {
+    splitLinesEl.replaceChildren();
+
+    if (!splitSession) {
+      splitPanel.hidden = true;
+      splitEmptyHint.hidden = true;
+      return;
+    }
+
+    splitPanel.hidden = false;
+
+    if (splitSession.lines.length === 0) {
+      const none = document.createElement("li");
+      none.className = "split-none";
+      none.textContent =
+        "当前正文里已经没有 [" + splitSession.sourceId + "] 的引用。可以选择其他编号，或点“重新载入当前正文”。";
+      splitLinesEl.appendChild(none);
+      updateSplitCount();
+      return;
+    }
+
+    for (const line of splitSession.lines) {
+      const li = document.createElement("li");
+      li.className = "split-line";
+
+      const head = document.createElement("div");
+      head.className = "split-line-head";
+      head.textContent =
+        "原文第 " + (line.lineIndex + 1) + " 行 · 本行 " + line.occurrences.length + " 处引用";
+      head.title = line.lineText;
+      li.appendChild(head);
+
+      for (const occ of line.occurrences) {
+        const label = document.createElement("label");
+        label.className = "split-occ";
+
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = occ.checked;
+        box.dataset.sourceLine = String(line.lineIndex);
+        box.dataset.ordinal = String(occ.ordinal);
+        box.addEventListener("change", () => {
+          occ.checked = box.checked;
+          updateSplitCount();
+        });
+        label.appendChild(box);
+
+        const ctx = splitContext(line.lineText, occ.start, occ.end);
+        const ctxEl = document.createElement("span");
+        ctxEl.className = "split-occ-context";
+
+        if (ctx.beforeCut) {
+          const ell = document.createElement("span");
+          ell.className = "split-ellipsis";
+          ell.textContent = "…";
+          ctxEl.appendChild(ell);
+        }
+        ctxEl.appendChild(document.createTextNode(ctx.before));
+
+        const mark = document.createElement("mark");
+        mark.className = "split-mark";
+        mark.textContent = occ.marker;
+        ctxEl.appendChild(mark);
+
+        ctxEl.appendChild(document.createTextNode(ctx.after));
+        if (ctx.afterCut) {
+          const ell = document.createElement("span");
+          ell.className = "split-ellipsis";
+          ell.textContent = "…";
+          ctxEl.appendChild(ell);
+        }
+        label.appendChild(ctxEl);
+
+        const pos = document.createElement("span");
+        pos.className = "split-occ-pos";
+        pos.textContent = "本行第 " + (occ.ordinal + 1) + " 处";
+        label.appendChild(pos);
+
+        li.appendChild(label);
+      }
+
+      splitLinesEl.appendChild(li);
+    }
+
+    updateSplitCount();
+  }
+
+  /**
+   * 每次分页后同步拆注卡片的“外壳”：脚注号下拉选项、正文是否改动
+   * 的提示。面板内的快照行不随输入重建，避免勾选被打断。
+   */
+  function syncSplitControls() {
+    const ids = extractIds(state.text);
+    const desired = splitSession ? splitSession.sourceId : "";
+    const signature = ids.join("|") + "||" + desired;
+
+    if (signature !== splitOptionsSignature) {
+      splitOptionsSignature = signature;
+      splitSourceSelect.replaceChildren();
+
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = ids.length
+        ? "请选择要拆分的脚注号"
+        : "正文里还没有脚注引用";
+      splitSourceSelect.appendChild(placeholder);
+
+      for (const id of ids) {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = "[" + id + "]";
+        splitSourceSelect.appendChild(opt);
+      }
+
+      if (desired && !ids.includes(desired)) {
+        const ghost = document.createElement("option");
+        ghost.value = desired;
+        ghost.textContent = "[" + desired + "]（当前正文中已无此引用）";
+        splitSourceSelect.appendChild(ghost);
+      }
+
+      splitSourceSelect.value = desired;
+      splitSourceSelect.disabled = ids.length === 0 && !desired;
+    }
+
+    splitEmptyHint.hidden = ids.length !== 0;
+    if (ids.length === 0) {
+      splitEmptyHint.textContent = "正文里还没有 [^编号] 引用，暂时没有可拆分的脚注。";
+    }
+
+    splitDirtyHint.hidden = !(splitSession && state.text !== splitSession.textSnapshot);
+  }
+
+  /** 找到当前正文中与 lineText 逐字相同的全部行号 */
+  function findMatchingLines(currentLines, lineText) {
+    const hits = [];
+    for (let i = 0; i < currentLines.length; i++) {
+      if (currentLines[i] === lineText) hits.push(i);
+    }
+    return hits;
+  }
+
+  function splitSnippet(lineText) {
+    const t = lineText.trim();
+    return t.length > 40 ? t.slice(0, 40) + "…" : t || "（空行）";
+  }
+
+  /**
+   * 确认拆注。
+   * 1) 校验勾选、新号格式与占用（正文引用 + 已保存脚注，含未填 /
+   *    未被引用者）；
+   * 2) 把每个勾选处的“原行”拿到当前正文里逐字匹配，必须唯一；
+   * 3) 只替换勾选标记的编号，其余正文改动原样保留；
+   * 4) 保存失败则回滚正文与脚注，保持确认前状态。
+   */
+  function confirmSplit() {
+    if (!splitSession) return;
+
+    const sourceId = splitSession.sourceId;
+    const checked = splitCheckedOccurrences();
+    const newId = normId(splitNewId.value);
+    const newNote = splitNewNote.value;
+
+    if (checked.length === 0) {
+      showSplitStatus("未能拆注：请至少勾选一处要改用新注的引用。", "error");
+      return;
+    }
+    if (!newId) {
+      showSplitStatus("未能拆注：请填写新脚注号（不能为空）。", "error");
+      return;
+    }
+    if (/[\[\]\r\n]/.test(newId)) {
+      showSplitStatus("未能拆注：新脚注号不能包含 [、] 或换行，请换一个编号。", "error");
+      return;
+    }
+    if (newNote.trim() === "") {
+      showSplitStatus("未能拆注：请填写新脚注的释义，再确认拆注。", "error");
+      return;
+    }
+
+    const currentText = sourceInput.value;
+    const currentIds = extractIds(currentText);
+    const currentLines = currentText.split("\n");
+
+    // ---- 撞号检查：当前正文 + 已保存脚注都须空闲 ----
+    const reasons = [];
+    if (newId === sourceId) {
+      reasons.push("它与要拆分的原号相同");
+    } else if (currentIds.includes(newId)) {
+      reasons.push("当前正文已经引用该号");
+    }
+    const savedKey = Object.keys(state.notes).find((k) => normId(k) === newId);
+    if (savedKey !== undefined) {
+      const hasContent = String(state.notes[savedKey] || "").trim() !== "";
+      reasons.push(
+        hasContent
+          ? "已保存脚注中已有该号"
+          : "已保存脚注中已有该号（内容尚未填写，仍然占号）"
+      );
+    }
+    if (reasons.length) {
+      showSplitStatus(
+        "未能拆注：新脚注号 [" + newId + "] 不能使用——“" + reasons.join("；") +
+        "”。未填写的引用和未被引用的脚注同样占号。",
+        "error"
+      );
+      return;
+    }
+
+    // ---- 按“原行内容”在当前正文中唯一定位 ----
+    // 以打开时的源行（行号）分组：同一原行里的多处勾选共享一次定位，
+    // 行内第几处（ordinal）决定到底改哪个标记。若打开时就有两行内容
+    // 完全相同，它们各自的匹配也都会不唯一，从而被拒绝。
+    const groups = new Map(); // source line index -> { lineText, ordinals:Set }
+    for (const { line, occ } of checked) {
+      let g = groups.get(line.lineIndex);
+      if (!g) {
+        g = { lineText: line.lineText, ordinals: new Set() };
+        groups.set(line.lineIndex, g);
+      }
+      g.ordinals.add(occ.ordinal);
+    }
+
+    const failures = [];
+    const targets = new Map(); // current line index -> Set<ordinal>
+    const claimedBy = new Map(); // current line index -> first source line index
+    for (const [sourceLineIndex, g] of groups) {
+      const hits = findMatchingLines(currentLines, g.lineText);
+      if (hits.length === 0) {
+        failures.push(
+          "原文第 " + (sourceLineIndex + 1) + " 行在当前正文里已找不到（无法逐字匹配）：「" +
+          splitSnippet(g.lineText) + "」"
+        );
+        continue;
+      }
+      if (hits.length > 1) {
+        failures.push(
+          "原文第 " + (sourceLineIndex + 1) + " 行在当前正文里出现 " + hits.length +
+          " 次，无法唯一定位：「" + splitSnippet(g.lineText) + "」"
+        );
+        continue;
+      }
+      const targetLine = hits[0];
+      // 打开时有两行逐字相同、当前正文只剩其中一行时，两组勾选会落到
+      // 同一个当前行，无法区分是哪一处，必须拒绝而不是猜测。
+      if (claimedBy.has(targetLine)) {
+        failures.push(
+          "原文第 " + (claimedBy.get(targetLine) + 1) + " 行与第 " + (sourceLineIndex + 1) +
+          " 行内容相同，都只能对应到当前正文的同一行，无法唯一定位。"
+        );
+        continue;
+      }
+      claimedBy.set(targetLine, sourceLineIndex);
+      targets.set(targetLine, new Set(g.ordinals));
+    }
+
+    if (failures.length) {
+      showSplitStatus(
+        "未能拆注：\n" + failures.join("\n") +
+        "\n请让这些原行在当前正文中保持逐字一致且只出现一次（整行移动位置不影响）；" +
+        "也可以点“重新载入当前正文”后再勾选。",
+        "error"
+      );
+      return;
+    }
+
+    // ---- 只替换勾选标记的编号（保留标记内原有空白写法） ----
+    const nextLines = currentLines.slice();
+    let replaced = 0;
+    for (const [lineIdx, ordinals] of targets) {
+      const lineText = currentLines[lineIdx];
+      const matches = listSplitOccurrences(lineText, sourceId);
+      const ordered = Array.from(ordinals).sort((a, b) => b - a);
+
+      let nextLine = lineText;
+      for (const ordinal of ordered) {
+        const m = matches[ordinal];
+        if (!m || nextLine.slice(m.start, m.end) !== m.marker) {
+          showSplitStatus(
+            "未能拆注：勾选处与当前正文无法对应（内部定位不一致）。已保持确认前的正文和脚注。",
+            "error"
+          );
+          return;
+        }
+        const lead = m.inner.match(/^\s*/)[0];
+        const trail = m.inner.match(/\s*$/)[0];
+        const replacement = "[^" + lead + newId + trail + "]";
+        nextLine = nextLine.slice(0, m.start) + replacement + nextLine.slice(m.end);
+        replaced += 1;
+      }
+      nextLines[lineIdx] = nextLine;
+    }
+
+    if (replaced !== checked.length) {
+      showSplitStatus(
+        "未能拆注：勾选处与当前正文无法一一对应（内部定位不一致）。已保持确认前的正文和脚注。",
+        "error"
+      );
+      return;
+    }
+
+    // ---- 提交：保存 + 刷新预览；任一步失败都回滚到确认前 ----
+    const nextText = nextLines.join("\n");
+    const prevText = state.text;
+    const prevNotes = Object.assign({}, state.notes);
+    const prevInputValue = sourceInput.value;
+
+    let failure = null;
+    try {
+      state.text = nextText;
+      state.notes[newId] = newNote;
+      sourceInput.value = nextText;
+      persistStrict();
+    } catch (err) {
+      failure = {
+        kind: "保存失败",
+        detail: err && err.message ? err.message : String(err),
+      };
+    }
+
+    if (!failure) {
+      try {
+        runNow();
+      } catch (err) {
+        failure = {
+          kind: "刷新预览失败",
+          detail: err && err.message ? err.message : String(err),
+        };
+      }
+    }
+
+    if (failure) {
+      state.text = prevText;
+      state.notes = prevNotes;
+      sourceInput.value = prevInputValue;
+      try {
+        persistStrict();
+      } catch (ignored) { /* 尽力恢复 */ }
+      try {
+        runNow();
+      } catch (ignored) { /* 保留原页面 */ }
+      showSplitStatus(
+        "未能拆注：" + failure.kind + "（" + failure.detail +
+        "）。已保持确认前的正文和脚注。",
+        "error"
+      );
+      return;
+    }
+
+    // ---- 成功后按新正文刷新拆注快照（保留源号选择） ----
+    splitNewId.value = "";
+    splitNewNote.value = "";
+    splitSourceSelect.value = sourceId;
+    openSplitSession(sourceId);
+    renderSplitPanel();
+    syncSplitControls();
+    showSplitStatus(
+      "拆注成功：已把 " + replaced + " 处 [^" + sourceId + "] 改为 [^" + newId +
+      "]，并新增脚注 [" + newId + "]。其他正文改动均已保留，预览已刷新。",
+      "success"
+    );
+  }
+
+  // ============================================================
   // 问题面板 / 状态条
   // ============================================================
 
@@ -684,6 +1172,7 @@
       document.body.classList.remove("print-blocked");
       statusPill.classList.remove("is-ok", "is-error");
       statusPill.textContent = "请输入讲义内容";
+      syncSplitControls();
       emitDebug();
       return;
     }
@@ -705,6 +1194,7 @@
     const missingIds = ids.filter((id) => (state.notes[id] || "").trim() === "");
     renderIssues(result, lastHorizontalIssues, missingIds);
     renderStatus(result, lastHorizontalIssues, missingIds);
+    syncSplitControls();
 
     emitDebug({ ids, missingIds });
   }
@@ -805,6 +1295,12 @@
     state.notes = Object.assign({}, SAMPLE_NOTES);
     sourceInput.value = state.text;
     renderedIdSignature = ""; // 强制重建脚注输入框
+    // 拆注快照与示例无关，直接关闭，避免误拆到示例正文
+    splitSession = null;
+    splitSourceSelect.value = "";
+    splitLinesEl.replaceChildren();
+    renderSplitPanel();
+    clearSplitStatus();
     runNow();
     persist();
   });
@@ -812,9 +1308,75 @@
   clearBtn.addEventListener("click", () => {
     state.text = "";
     sourceInput.value = "";
+    splitSession = null;
+    splitSourceSelect.value = "";
+    splitLinesEl.replaceChildren();
+    renderSplitPanel();
+    clearSplitStatus();
     scheduleRun();
     persist();
     sourceInput.focus();
+  });
+
+  // ---------------- 拆分脚注控件 ----------------
+
+  splitSourceSelect.addEventListener("change", () => {
+    const id = splitSourceSelect.value;
+    clearSplitStatus();
+    if (!id) {
+      splitSession = null;
+      splitLinesEl.replaceChildren();
+      renderSplitPanel();
+      syncSplitControls();
+      return;
+    }
+    openSplitSession(id);
+    renderSplitPanel();
+    syncSplitControls();
+  });
+
+  splitReloadBtn.addEventListener("click", () => {
+    if (!splitSession) return;
+    splitSourceSelect.value = splitSession.sourceId;
+    openSplitSession(splitSession.sourceId);
+    renderSplitPanel();
+    syncSplitControls();
+    showSplitStatus("已按当前正文重新载入引用列表，原有勾选已清空。", "");
+  });
+
+  splitSelectAllBtn.addEventListener("click", () => {
+    if (!splitSession) return;
+    for (const line of splitSession.lines) {
+      for (const occ of line.occurrences) occ.checked = true;
+    }
+    splitLinesEl.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+      box.checked = true;
+    });
+    updateSplitCount();
+  });
+
+  splitClearSelectionBtn.addEventListener("click", () => {
+    if (!splitSession) return;
+    for (const line of splitSession.lines) {
+      for (const occ of line.occurrences) occ.checked = false;
+    }
+    splitLinesEl.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+      box.checked = false;
+    });
+    updateSplitCount();
+  });
+
+  splitConfirmBtn.addEventListener("click", () => confirmSplit());
+
+  splitCancelBtn.addEventListener("click", () => {
+    splitSession = null;
+    splitNewId.value = "";
+    splitNewNote.value = "";
+    splitLinesEl.replaceChildren();
+    clearSplitStatus();
+    splitSourceSelect.value = "";
+    syncSplitControls();
+    renderSplitPanel();
   });
 
   // 字体晚到（如系统字体异步加载）后重排一次
@@ -841,6 +1403,29 @@
     state,
     getLastResult: () => lastResult,
     getLines: () => lastLines,
+    split: {
+      getSession: () => splitSession,
+      open: (id) => {
+        splitSourceSelect.value = id;
+        openSplitSession(id);
+        renderSplitPanel();
+        syncSplitControls();
+      },
+      setChecks: (keys) => {
+        if (!splitSession) return;
+        const wanted = new Set(keys);
+        for (const line of splitSession.lines) {
+          for (const occ of line.occurrences) {
+            occ.checked = wanted.has(line.lineText + "\u0000" + occ.ordinal);
+          }
+        }
+        renderSplitPanel();
+      },
+      setNewId: (value) => { splitNewId.value = value; },
+      setNewNote: (value) => { splitNewNote.value = value; },
+      confirm: () => confirmSplit(),
+      status: () => (splitStatus.hidden ? "" : splitStatus.textContent),
+    },
   };
 
   runNow();
